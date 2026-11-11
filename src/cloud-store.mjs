@@ -30,6 +30,14 @@ export class CloudStore{
   AND (lease_until IS NULL OR lease_until<clock_timestamp()) ORDER BY next_due,user_id LIMIT $1`,[limit])).map(r=>r.user_id);}
  async heartbeat(){await this.query("INSERT INTO nurse_meta(key,value) VALUES('last_cron',clock_timestamp()::text) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[]);}
  async ping(){await this.query('SELECT 1',[]);}
+ async verifyLineToken(token,clientId){
+  const r=await fetch('https://api.line.me/oauth2/v2.1/verify?'+new URLSearchParams({access_token:token}),{signal:AbortSignal.timeout(8000)});
+  if(!r.ok)throw Error('invalid_line_token');const data=await r.json();
+  if(data.client_id!==clientId||Number(data.expires_in)<0)throw Error('wrong_line_client');
+  const p=await fetch('https://api.line.me/v2/profile',{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(8000)});
+  if(!p.ok)throw Error('line_profile_failed');const profile=await p.json();
+  if(!/^U[a-f0-9]{32}$/.test(profile.userId||''))throw Error('invalid_line_user');return profile;
+ }
 }
 export async function connectCloudStore(env){
  if(!env.DATABASE_URL||!/^postgres(?:ql)?:\/\//.test(env.DATABASE_URL))throw Error('database_not_configured');

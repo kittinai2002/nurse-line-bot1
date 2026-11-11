@@ -6,8 +6,9 @@
   "outputDirectory": "public",
   "functions": {"api/*.js": {"maxDuration": 60}},
   "rewrites": [
+    {"source": "/api/web-app", "destination": "/api/web-app"},
     {"source": "/webhook", "destination": "/api/webhook"},
     {"source": "/healthz", "destination": "/api/healthz"},
-    {"source": "/", "destination": "/api/healthz"}
+    {"source": "/healthz", "destination": "/api/healthz"}
   ]
 }

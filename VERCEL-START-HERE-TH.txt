@@ -1,0 +1,103 @@
+ย้ายบอต LINE ขึ้น Vercel — รุ่น 2.6.0
+====================================
+
+ใช้ใน LINE เหมือนเดิม ไม่มีหน้าเว็บให้ลงเวร
+หลังติดตั้งสำเร็จ ไม่ต้องเปิดคอมหรือ Cloudflare Tunnel ค้างไว้
+
+ต้องใช้ 3 บริการ
+1. Vercel รันบอตและรับข้อความจาก LINE
+2. Neon เก็บตาราง/ตั้งค่าออนไลน์แบบถาวร
+3. cron-job.org เรียกตัวตรวจแจ้งเตือนทุกนาที
+
+ไฟล์ชุดนี้เตรียมโค้ดและการตั้งค่าไว้แล้ว ยังไม่ได้สร้างบริการหรือเปิดระบบจริงให้
+บริการอาจมีโควตา/ค่าใช้จ่ายตามแพ็กเกจของคุณ ตรวจหน้าบัญชีก่อนเปิดใช้
+ไม่ต้องซื้อ Vercel Pro เพียงเพื่อใช้ Cron ของ Vercel เพราะชุดนี้ใช้ตัวเรียกจากภายนอก
+
+ขั้นที่ 1 — สร้างที่เก็บข้อมูลบน Neon
+------------------------------------
+• เปิด https://console.neon.tech/ แล้วสร้างโปรเจกต์สำหรับบอตนี้โดยเฉพาะ
+• เลือกฐานข้อมูลและ region ที่ใกล้ผู้ใช้/เซิร์ฟเวอร์
+• ใน SQL Editor เปิดไฟล์ schema/vercel.sql จากชุดนี้ คัดลอกเนื้อหาทั้งหมดไป Run
+• ที่หน้า Connect คัดลอก Connection string (ขึ้นต้น postgresql://...)
+  ลิงก์นี้มีรหัสผ่านอยู่ ห้ามส่งในแชตหรือใส่ใน repository
+
+ถ้ามีบอต Windows เดิม
+• สำรองโฟลเดอร์บอตเก่า โดยเฉพาะ .env และ data
+• คัดลอกโค้ดชุดใหม่ทั้งชุดไปในโฟลเดอร์บอตเดิม แต่เก็บ .env และ data ของเดิมไว้
+• เปิด 07-SETUP-VERCEL.cmd โปรแกรมเตรียมไฟล์ .env.vercel ให้
+  ค่าของ LINE จะคัดลอกจาก .env เดิมให้หากมี และสร้าง CRON_SECRET ให้ใหม่
+• กรอก DATABASE_URL ด้วย Connection string จาก Neon แล้ว Save
+• ไม่ต้องส่งไฟล์ .env.vercel ให้ใคร เก็บไว้ในเครื่อง
+
+ถ้าไม่ได้ใช้ Windows เดิม ให้เตรียม 5 ค่าใน .env.vercel.example ไว้กรอกใน Vercel
+อย่าบันทึกค่าจริงในไฟล์ตัวอย่างหรือเอาค่าจริงขึ้น GitHub
+
+ขั้นที่ 2 — นำโค้ดขึ้น Vercel
+------------------------------
+• แตก ZIP ทั้งหมดก่อน
+• สร้าง GitHub repository แบบ Private แล้วอัปโหลดโค้ดชุดนี้
+  ต้องมี package.json, package-lock.json, vercel.json, api, src, schema, scripts และ public อยู่ที่ราก
+  ห้ามอัปโหลด .env, .env.vercel, data หรือฐานข้อมูล SQLite จริง
+  หากอัปโหลดผ่านเว็บ GitHub ให้ระวังว่าไฟล์ .gitignore ไม่ได้ป้องกันการเลือกไฟล์ผิดให้เสมอ
+• เปิด https://vercel.com/new แล้ว Import repository นี้
+• Framework Preset: Other
+• Root Directory: โฟลเดอร์ที่มี package.json และ vercel.json
+• Node.js Version: 24.x
+• ใช้ Build/Install/Output Directory ตาม vercel.json ไม่ต้องพิมพ์ทับ
+• เพิ่ม Environment Variables ใน Production ให้ครบ 5 ค่า:
+
+  LINE_CHANNEL_SECRET       ค่าจาก Messaging API เดิม
+  LINE_CHANNEL_ACCESS_TOKEN ค่าจาก Messaging API เดิม
+  LINE_OWNER_USER_ID        Your user ID ของเจ้าของเดิม ห้ามเปลี่ยนเป็นสมาชิกใหม่
+  DATABASE_URL              Connection string ของ Neon
+  CRON_SECRET               ค่าที่สร้างไว้ใน .env.vercel
+
+• Deploy แล้วเปิด Production URL ของโปรเจกต์จริง เติม /healthz
+  ต้องเห็น "ok": true และ "mode": "vercel"
+• ถ้าเปิดแล้วติดหน้า Sign in ของ Vercel ให้ตรวจ Deployment Protection ของ Production
+  LINE และตัวเรียกเวลาต้องเข้าถึง Production URL นี้ได้โดยไม่ล็อกอิน Vercel
+  ใช้ Production เฉพาะบอตนี้ ไม่ใช่ Preview ที่มีรหัสผ่าน
+• หากเพิ่มหรือแก้ Environment Variables หลัง Deploy ต้อง Redeploy อีกครั้ง
+
+ขั้นที่ 3 — เปิดตัวตรวจแจ้งเตือนทุกนาที
+---------------------------------------
+• สมัคร/เข้าสู่ระบบ https://console.cron-job.org/
+• สร้าง Cronjob ชื่อ nurse-line-reminders
+• URL: Production URL ของ Vercel เติม /api/cron
+• Schedule: Every minute (ทุก 1 นาที)
+• Request method: GET
+• ในส่วน Headers เพิ่ม:
+
+  ชื่อ: Authorization
+  ค่า: Bearer ตามด้วยเว้นวรรค แล้วตามด้วย CRON_SECRET จริงของคุณ
+
+  ไม่ต้องใส่เครื่องหมาย < > และอย่าใส่ CRON_SECRET ไว้ใน URL
+
+• เปิดการแจ้งเตือนเมื่อ job ล้มเหลวในบัญชี cron-job.org เพื่อให้ตรวจพบเมื่อการเตือนหยุด
+• กด Test run ต้องได้ HTTP 200 แล้วจึงเปิดใช้งาน Cronjob
+• ถ้าได้ 401: Header หรือ CRON_SECRET ไม่ตรงกัน
+• ถ้าได้ 503: ตรวจฐานข้อมูล ตัวแปร Vercel และผล Deploy
+• ถ้าได้ 302/หน้า Login: ยังถูก Deployment Protection ขวาง
+
+ต่อ LINE OA และย้ายข้อมูลเก่า
+------------------------------
+• ถ้ามีตารางเก่า ให้ย้ายตาม VERCEL-MOVE-OLD-DATA-TH.txt ก่อนเปลี่ยน Webhook
+• ใน LINE Developers ของ OA เดิม > Messaging API > Webhook URL
+  ตั้ง Production URL ของ Vercel เติม /webhook แล้ว Update > Verify ให้ Success
+• เปิด Use webhook และ Webhook redelivery
+• ส่ง เมนู ในแชต OA ตรวจตารางและเวลา แล้วเปิดแจ้งเตือนของแต่ละคนเมื่อพร้อม
+• หลังย้ายแล้ว อย่าเปิดบอต Windows ที่ส่งเตือนตัวเก่าค้างไว้พร้อมกัน
+• ไม่ใช้ลิงก์ trycloudflare.com แล้ว ใช้โดเมน Production ของ Vercel เท่านั้น
+
+ทดสอบการเตือนจริงครั้งแรก
+• เริ่มจากบัญชีตนเองก่อน ตั้งเวรทดสอบที่ยังไม่ถึงเวลาและระยะเตือนที่เหมาะสม
+• ตรวจว่าเพิ่มเพื่อน OA เปิดแจ้งเตือน LINE และเปิดแจ้งเตือนในบอตแล้ว
+• ดูผลการเรียก Cronjob ว่าทำงานทุกนาที และตรวจข้อความใน LINE จริง
+• เมื่อทดสอบเสร็จ แก้/ลบเวรทดสอบออก อย่าให้ค้างเป็นตารางจริง
+
+หมายเหตุ
+• การเรียกทุกนาทีไม่รับประกันตรงวินาที อาจคลาดเคลื่อนตามบริการและเครือข่าย
+• ถ้าตัวเรียกหยุดนานจนเลยเวลาเตือน 10 นาที หรือถึงเวลาเข้าเวรแล้ว ระบบไม่ส่งเตือนเก่าย้อนหลัง
+• ข้อมูลออนไลน์แยกรายคน เมนูหลักยังเป็น เวรวันนี้ / ตารางของฉัน / ตั้งค่า
+• สมาชิกใหม่เริ่มปิดแจ้งเตือน และต้องตรวจยืนยันเวลาเอง
+• โควตาข้อความ LINE OA ยังมีผลเหมือนเดิม

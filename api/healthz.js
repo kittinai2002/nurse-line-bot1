@@ -1,2 +1,3 @@
-import {createVercelHandler} from '../src/vercel-handler.mjs';
-export default createVercelHandler('healthz');
+export default function handler(req, res) {
+  res.status(200).json({ ok: true, service: 'nurse-line-bot-vercel', version: '2.5.1-vercel' });
+}

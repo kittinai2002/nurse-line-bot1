@@ -1,4 +1,4 @@
-// Optional: upload a matching THREE-EQUAL-COLUMN PNG/JPEG rich-menu image.
+// Optional: upload a matching THREE-EQUAL-COLUMN PNG rich-menu image.
 // Never supply credentials as command arguments. Set runtime environment variables.
 import {readFile} from 'node:fs/promises';
 const token=process.env.LINE_CHANNEL_ACCESS_TOKEN;
